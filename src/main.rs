@@ -11,6 +11,7 @@ use futures::Future;
 
 use hyper::header::ContentLength;
 use hyper::server::{Http, Request, Response, Service};
+use hyper::StatusCode;
 
 use tokio_proto::TcpServer;
 
@@ -64,8 +65,9 @@ const NOT_FOUND_MSG: &'static str = "Not found";
 type WebFuture = Box<future::Future<Item=Response, Error=hyper::Error>>;
 type BodyFuture = Box<future::Future<Item=Vec<u8>, Error=Box<ServerError>>>;
 
-fn resp_with_msg(msg: &str) -> Response {
+fn resp_with_msg(msg: &str, status: StatusCode) -> Response {
     Response::new()
+        .with_status(status)
         .with_header(ContentLength(msg.len() as u64))
         .with_body(String::from(msg))
 }
@@ -104,11 +106,15 @@ fn make_resp(val: Result<Value, Box<ServerError>>) -> Result<Response, hyper::Er
         Ok(val) => {
             let s = serde_json::to_string(&val);
             match s {
-                Ok(s) => Ok::<_,hyper::Error>(resp_with_msg(&s)),
-                Err(e) => Ok::<_,hyper::Error>(resp_with_msg(&format!("Err {}", e)))
+                Ok(s) => Ok::<_,hyper::Error>(resp_with_msg(&s, StatusCode::Ok)),
+                Err(e) => Ok::<_,hyper::Error>(
+                    resp_with_msg(&format!("Err {} cannot convert output value to string", e),
+                                  StatusCode::InternalServerError))
             }
         },
-        Err(e) => Ok::<_,hyper::Error>(resp_with_msg(&format!("Err {}", e)))
+        Err(e) => Ok::<_,hyper::Error>(
+            resp_with_msg(&format!("Err {}", e),
+                          StatusCode::InternalServerError))
     }
 }
 
