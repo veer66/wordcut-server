@@ -11,7 +11,7 @@ use futures::Future;
 
 use hyper::header::ContentLength;
 use hyper::server::{Http, Request, Response, Service};
-use hyper::StatusCode;
+use hyper::{StatusCode, Post};
 
 use tokio_proto::TcpServer;
 
@@ -158,12 +158,10 @@ impl Service for WordcutServer {
 
     
     fn call(&self, req: Request) -> Self::Future {
-        if req.method() == &hyper::Method::Post && req.path() == "/wordseg" {
-            wordseg_handler(req)
-        } else if req.method() == &hyper::Method::Post && req.path() == "/dag" {
-            dag_handler(req)
-        } else {
-            not_found(req)
+        match (req.method(), req.path()) {
+            (&Post, "/wordseg") => wordseg_handler(req),
+            (&Post, "/dag") => dag_handler(req),
+            _ => not_found(req)
         }
     }
 }
