@@ -121,6 +121,20 @@ fn wordseg_handler(req: Request) -> WebFuture {
     return Box::new(fut)
 }
 
+fn build_dag(text: String) -> Result<Value, Box<ServerError>> {
+    let dag = WORDCUT.build_dag(&text);
+    Ok(json!({"dag": dag}))
+}
+
+fn dag_handler(req: Request) -> WebFuture {
+    let fut = read_body(req)
+        .and_then(read_val)
+        .and_then(get_text)
+        .and_then(build_dag)
+        .then(make_resp);
+    return Box::new(fut)
+}
+
 fn not_found(_req: Request) -> WebFuture {
     let resp = Response::new()
         .with_header(ContentLength(NOT_FOUND_MSG.len() as u64))
@@ -140,6 +154,8 @@ impl Service for WordcutServer {
     fn call(&self, req: Request) -> Self::Future {
         if req.method() == &hyper::Method::Post && req.path() == "/wordseg" {
             wordseg_handler(req)
+        } else if req.method() == &hyper::Method::Post && req.path() == "/dag" {
+            dag_handler(req)
         } else {
             not_found(req)
         }
