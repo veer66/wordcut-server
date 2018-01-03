@@ -78,20 +78,10 @@ fn read_val(body: Vec<u8>) -> Result<Value, Box<ServerError>> {
 }
 
 fn get_text(val: Value) -> Result<String, Box<ServerError>> {
-    match val.as_object() {
-        Some(obj) => {
-            match obj.get("text") {
-                Some(text) => {
-                    match text.as_str() {
-                        Some(text) => Ok(String::from(text)),
-                        None => Err(Box::new(ServerError::CannotGetTextAttr))
-                    }
-                }
-                None => Err(Box::new(ServerError::CannotGetTextAttr))
-            }
-        }
-        None => Err(Box::new(ServerError::CannotGetJsonObject))
-    }
+    val.as_object().ok_or(Box::new(ServerError::CannotGetJsonObject))
+        .and_then(|obj| obj.get("text").ok_or(Box::new(ServerError::CannotGetTextAttr)))
+        .and_then(|text| text.as_str().ok_or(Box::new(ServerError::CannotGetTextAttr)))
+        .map(|text| String::from(text))
 }
 
 fn wordseg(text: String) -> Result<Value, Box<ServerError>> {
@@ -164,6 +154,6 @@ fn main() {
     tcp_server.threads(num_threads);
 
     println!("Listening {:?} ...", addr);
-
+    
     tcp_server.serve(||Ok(WordcutServer));
 }
