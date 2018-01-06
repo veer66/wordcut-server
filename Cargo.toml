@@ -10,3 +10,4 @@ tokio-proto = "0.1"
 serde_json = "1.0.7"
 wordcut-engine = { git="https://github.com/veer66/wordcut-engine" }
 lazy_static = "1.0.0"
+config = "0.7.0"
