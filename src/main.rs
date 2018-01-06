@@ -41,15 +41,17 @@ pub enum ServerError {
 lazy_static! {
     static ref CONFIG: HashMap<String, String> = {
         let mut settings = config::Config::default();
-        settings.merge(config::File::with_name("config")).unwrap();
-        settings.merge(config::Environment::with_prefix("app")).unwrap();
-        settings.try_into().unwrap()
+        settings.merge(config::File::with_name("config"))
+            .expect("Can't get config file");;
+        settings.try_into().expect("Can't turn settings to map")
     };
 
     static ref WORDCUT: Wordcut = {
-        let path_str = CONFIG.get("dict_path").unwrap();
+        let path_str = CONFIG.get("dict_path")
+            .expect("Can't get dict_path");
         let path = Path::new(path_str);
-        let dict = load_dict(path).expect("Cannot load dict");
+        let dict = load_dict(path)
+            .expect("Cannot load dict");
         Wordcut::new(dict)
     };
 }
@@ -179,7 +181,9 @@ impl Service for WordcutServer {
 }
 
 fn main() {
-    let num_threads = CONFIG.get("num_threads").unwrap().parse().unwrap();
+    let num_threads = CONFIG.get("num_threads")
+        .expect("Can't get num_threads")
+        .parse().expect("Can't parse num_threads");
     let addr = "127.0.0.1:3000".parse().unwrap();
     let http_server = Http::new();
     let mut tcp_server = TcpServer::new(http_server, addr);
