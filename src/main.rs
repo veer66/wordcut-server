@@ -4,6 +4,7 @@ extern crate tokio_proto;
 #[macro_use]
 extern crate serde_json;
 extern crate wordcut_engine;
+extern crate config;
 
 use futures::future;
 use futures::Stream;
@@ -26,7 +27,7 @@ use std::error;
 use std::fmt;
 use std::result;
 use std::path::Path;
-
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum ServerError {
@@ -38,8 +39,19 @@ pub enum ServerError {
 }
 
 lazy_static! {
-    static ref WORDCUT: Wordcut = Wordcut::new(load_dict(Path::new("wordlist.txt"))
-                                               .expect("Cannot load dict"));
+    static ref CONFIG: HashMap<String, String> = {
+        let mut settings = config::Config::default();
+        settings.merge(config::File::with_name("config")).unwrap();
+        settings.merge(config::Environment::with_prefix("app")).unwrap();
+        settings.try_into().unwrap()
+    };
+
+    static ref WORDCUT: Wordcut = {
+        let path_str = CONFIG.get("dict_path").unwrap();
+        let path = Path::new(path_str);
+        let dict = load_dict(path).expect("Cannot load dict");
+        Wordcut::new(dict)
+    };
 }
 
 impl fmt::Display for ServerError {
@@ -167,9 +179,9 @@ impl Service for WordcutServer {
 }
 
 fn main() {
-    let num_threads = 8;
+    let num_threads = CONFIG.get("num_threads").unwrap().parse().unwrap();
     let addr = "127.0.0.1:3000".parse().unwrap();
-    let http_server = Http::new();    
+    let http_server = Http::new();
     let mut tcp_server = TcpServer::new(http_server, addr);
     tcp_server.threads(num_threads);
 
