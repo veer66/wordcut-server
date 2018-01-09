@@ -1,16 +1,16 @@
 #!/bin/sh
-
+PREFIX=http://localhost:3134
 echo "WORDSEG"
-curl -d '{"text":"กากกา"}' http://localhost:3000/wordseg
+curl -d '{"text":"กากกา"}' $PREFIX/wordseg
 echo
 echo
 echo "DAG"
-curl -d '{"text":"กากกา"}' http://localhost:3000/dag
+curl -d '{"text":"กากกา"}' $PREFIX/dag
 echo
 echo
 echo "DAG COMPLEX"
-curl -d '{"text":"รอบอก"}' http://localhost:3000/dag
+curl -d '{"text":"รอบอก"}' $PREFIX/dag
 echo
 echo
 echo "Invalid"
-curl -v -d '{"textx":"กากกา"}' http://localhost:3000/dag
+curl -v -d '{"textx":"กากกา"}' $PREFIX/dag
