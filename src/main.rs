@@ -184,7 +184,10 @@ fn main() {
     let num_threads = CONFIG.get("num_threads")
         .expect("Can't get num_threads")
         .parse().expect("Can't parse num_threads");
-    let addr = "127.0.0.1:3000".parse().unwrap();
+    let addr = CONFIG.get("bind_addr")
+        .expect("Can't get bind_addr")
+        .parse()
+        .expect("Can't parse URL");
     let http_server = Http::new();
     let mut tcp_server = TcpServer::new(http_server, addr);
     tcp_server.threads(num_threads);
