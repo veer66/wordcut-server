@@ -10,7 +10,7 @@ use futures::future;
 use futures::Stream;
 use futures::Future;
 
-use hyper::header::ContentLength;
+use hyper::header::{ContentLength, ContentType};
 use hyper::server::{Http, Request, Response, Service};
 use hyper::{StatusCode, Post};
 
@@ -82,6 +82,7 @@ type BodyFuture = Box<future::Future<Item=Vec<u8>, Error=Box<ServerError>>>;
 fn resp_with_msg(msg: &str, status: StatusCode) -> Response {
     Response::new()
         .with_status(status)
+        .with_header(ContentType::json())
         .with_header(ContentLength(msg.len() as u64))
         .with_body(String::from(msg))
 }
