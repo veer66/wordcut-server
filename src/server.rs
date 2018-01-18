@@ -23,6 +23,8 @@ use std::result;
 use std::path::Path;
 use std::collections::HashMap;
 
+use std::sync::Mutex;
+
 #[derive(Debug)]
 pub enum ServerError {
     CannotReadBody,
@@ -30,24 +32,6 @@ pub enum ServerError {
     CannotGetJsonObject,
     CannotGetTextAttr,
     TextAttrIsNotString
-}
-
-lazy_static! {
-    static ref CONFIG: HashMap<String, String> = {
-        let mut settings = config::Config::default();
-        settings.merge(config::File::with_name("config"))
-            .expect("Can't get config file");;
-        settings.try_into().expect("Can't turn settings to map")
-    };
-
-    static ref WORDCUT: Wordcut = {
-        let path_str = CONFIG.get("dict_path")
-            .expect("Can't get dict_path");
-        let path = Path::new(path_str);
-        let dict = load_dict(path)
-            .expect("Cannot load dict");
-        Wordcut::new(dict)
-    };
 }
 
 impl fmt::Display for ServerError {
@@ -66,7 +50,9 @@ impl error::Error for ServerError {
     }
 }
 
-struct WordcutServer;
+struct WordcutServer {
+    wordcut: &'static Wordcut
+}
 
 const NOT_FOUND_MSG: &'static str = "Not found";
 
@@ -95,8 +81,8 @@ fn get_text(val: Value) -> Result<String, Box<ServerError>> {
         .map(|text| String::from(text))
 }
 
-fn wordseg(text: String) -> Result<Value, Box<ServerError>> {
-    let toks = WORDCUT.segment_into_strings(&text);
+fn wordseg(wordcut: &'static Wordcut, text: String) -> Result<Value, Box<ServerError>> {
+    let toks = wordcut.segment_into_strings(&text);
     Ok(json!({"words": toks}))
 }
 
@@ -127,25 +113,25 @@ fn make_resp(val: Result<Value, Box<ServerError>>) -> Result<Response, hyper::Er
     }
 }
 
-fn wordseg_handler(req: Request) -> WebFuture {
+fn wordseg_handler(wordcut: &'static Wordcut, req: Request) -> WebFuture {
     let fut = read_body(req)
         .and_then(read_val)
         .and_then(get_text)
-        .and_then(wordseg)
+        .and_then(move |req| wordseg(wordcut,req))
         .then(make_resp);
     return Box::new(fut)
 }
 
-fn build_dag(text: String) -> Result<Value, Box<ServerError>> {
-    let dag = WORDCUT.build_dag(&text);
+fn build_dag(wordcut: &'static Wordcut, text: String) -> Result<Value, Box<ServerError>> {
+    let dag = wordcut.build_dag(&text);
     Ok(json!({"dag": dag}))
 }
 
-fn dag_handler(req: Request) -> WebFuture {
+fn dag_handler(wordcut: &'static Wordcut, req: Request) -> WebFuture {
     let fut = read_body(req)
         .and_then(read_val)
         .and_then(get_text)
-        .and_then(build_dag)
+        .and_then(move |req| build_dag(wordcut, req))
         .then(make_resp);
     return Box::new(fut)
 }
@@ -164,30 +150,66 @@ impl Service for WordcutServer {
     type Response = Response;
     type Error = hyper::Error;
     type Future = WebFuture;
-
     
     fn call(&self, req: Request) -> Self::Future {
         match (req.method(), req.path()) {
-            (&Post, "/wordseg") => wordseg_handler(req),
-            (&Post, "/dag") => dag_handler(req),
+            (&Post, "/wordseg") => wordseg_handler(self.wordcut, req),
+            (&Post, "/dag") => dag_handler(self.wordcut, req),
             _ => not_found(req)
         }
     }
 }
 
-pub fn run_server() {
-    let num_threads = CONFIG.get("num_threads")
+fn create_config(config_path: &str) -> HashMap<String, String> {
+    let mut settings = config::Config::default();
+    settings.merge(config::File::with_name(config_path))
+        .expect("Can't get config file");;
+    settings.try_into().expect("Can't turn settings to map")
+        
+}
+
+pub fn run_server(config_path: &str) {
+    lazy_static! {
+        static ref CONFIG: Mutex<HashMap<String, String>> = {
+            Mutex::new(HashMap::new())
+        };
+    }
+    
+    let tmp_conf = create_config(&config_path[..]);
+
+    for (k,v) in tmp_conf.iter() {
+        let mut conf = CONFIG.lock().unwrap();
+        conf.insert(k.clone(), v.clone());
+    }
+    
+    lazy_static! {
+        static ref WORDCUT: Wordcut = {
+            let conf = CONFIG.lock().unwrap();
+            {
+                let path_str = conf.get("dict_path")
+                    .expect("Can't get dict_path");
+                let path = Path::new(path_str);
+                let dict = load_dict(path)
+                    .expect("Cannot load dict");
+                Wordcut::new(dict)
+            }
+        };
+    }
+
+    let num_threads = CONFIG.lock().unwrap().get("num_threads")
         .expect("Can't get num_threads")
         .parse().expect("Can't parse num_threads");
-    let addr = CONFIG.get("bind_addr")
+
+    let addr = CONFIG.lock().unwrap().get("bind_addr")
         .expect("Can't get bind_addr")
         .parse()
         .expect("Can't parse URL");
+
     let http_server = Http::new();
     let mut tcp_server = TcpServer::new(http_server, addr);
     tcp_server.threads(num_threads);
 
     println!("Listening {:?} ...", addr);
     
-    tcp_server.serve(||Ok(WordcutServer));
+    tcp_server.serve(||Ok(WordcutServer {wordcut: &WORDCUT}));
 }
